@@ -25,23 +25,35 @@ public class Injector {
         return injector;
     }
 
-    public Object getInstance(Class<?> interfaceClazz) {
-        Class<?> implClazz = interfaceImplMap.get(interfaceClazz);
+    public <T> T getInstance(Class<T> clazz) {
+        Class<?> implClazz = interfaceImplMap.get(clazz);
+
         if (implClazz == null) {
-            throw new RuntimeException("No implementation found for " + interfaceClazz.getName());
+            if (clazz.isInterface()) {
+                throw new RuntimeException(
+                        "Injection failed: no implementation found for interface "
+                                + clazz.getName()
+                );
+            } else {
+                implClazz = clazz;
+            }
         }
-        if (instanceCache.containsKey(implClazz)) {
-            return instanceCache.get(implClazz);
-        }
+
         if (!implClazz.isAnnotationPresent(Component.class)) {
             throw new RuntimeException(
                     "Injection failed, missing @Component annotation on the class "
                             + implClazz.getName()
             );
         }
+
+        if (instanceCache.containsKey(implClazz)) {
+            return (T) instanceCache.get(implClazz);
+        }
+
         try {
             Object implInstance = implClazz.getDeclaredConstructor().newInstance();
             instanceCache.put(implClazz, implInstance);
+
             for (Field field : implClazz.getDeclaredFields()) {
                 if (field.isAnnotationPresent(Inject.class)) {
                     Object dependency = getInstance(field.getType());
@@ -49,11 +61,13 @@ public class Injector {
                     field.set(implInstance, dependency);
                 }
             }
-            return implInstance;
+
+            return (T) implInstance;
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(
                     "Injection failed, error while creating instance of class "
-                            + implClazz.getName(), e
+                            + implClazz.getName(),
+                    e
             );
         }
     }
